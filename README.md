@@ -11,3 +11,6 @@ It's just a folder that you want to create a tmux session on with configurable p
 Just run the well respected command `ta` on your terminal, then search for the project that you want and press `<Enter>`, soon we will add custom shorcuts to open project's
 
 
+## Draft Idea
+
+![draftDiagram](https://i.ibb.co/pjVMf25/TA-Design.png)
