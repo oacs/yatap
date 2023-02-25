@@ -1,3 +1,4 @@
+pub mod tmux;
 pub mod ui;
 use crate::ui::ui;
 use crossterm::{
@@ -123,6 +124,8 @@ fn handle_input(app: &mut App, key: KeyEvent) -> bool {
         InputMode::Editing => match key.code {
             KeyCode::Enter => {
                 println!("input: {}", app.repos.first().unwrap().display());
+                let path = &app.repos[app.selection_index];
+                tmux::attach_or_create_tmux_session(path.to_path_buf()).unwrap();
                 return true;
             }
             KeyCode::Char(c) => {
