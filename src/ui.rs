@@ -28,7 +28,7 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     render_help(f, app, chunks[0]);
 
-    app.repos = fetch_paths(app);
+    app.repos = fetch_paths(app.projects_paths.clone(), app.input.clone());
     render_list_paths(f, app, chunks[1]);
 
     render_input(f, app, chunks[2]);
@@ -88,19 +88,27 @@ fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     }
 }
 
-fn fetch_paths(app: &mut App) -> Vec<PathBuf> {
-    read_dir("/home/oacs/dev")
-        .unwrap()
-        .filter_map(|m| {
-            let path = m.unwrap().path();
-            // TODO change this to import string
-            if path.to_str().unwrap().contains(&app.input) {
-                Some(path)
-            } else {
-                None
+fn fetch_paths(paths: Vec<PathBuf>, input: String) -> Vec<PathBuf> {
+    let mut directories = vec![];
+
+    for path in paths {
+        if let Ok(entries) = read_dir(path.to_str().unwrap()) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let file_type = entry.file_type().unwrap();
+                    if file_type.is_dir() {
+                        directories.push(entry.path());
+                    }
+                }
             }
-        })
-        .collect()
+        }
+    }
+
+    directories
+        .iter()
+        .filter(|m| m.display().to_string().contains(&input))
+        .cloned()
+        .collect::<Vec<PathBuf>>()
 }
 
 fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
@@ -110,12 +118,8 @@ fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
         .enumerate()
         .map(|(i, p)| {
             ListItem::new(vec![Spans::from(Span::raw(format!(
-                "{}{}",
-                if i == app.selection_index {
-                    ">>>"
-                } else {
-                    "   "
-                },
+                "{} {}",
+                if i == app.selection_index { ">>" } else { "  " },
                 p.display()
             )))])
         })

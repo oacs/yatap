@@ -17,6 +17,7 @@ pub fn attach_or_create_tmux_session(dir: PathBuf) -> Result<TmuxOutput, Error> 
         NewSession::new()
             .detached()
             .session_name(session_name.clone())
+            .start_directory(dir.to_str().unwrap().to_string())
             .output()
             .unwrap();
         SwitchClient::new().target_session(target_session).output()

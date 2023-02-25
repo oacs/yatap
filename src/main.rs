@@ -1,6 +1,10 @@
+#[macro_use]
+extern crate lazy_static;
+
+mod config;
 pub mod tmux;
 pub mod ui;
-use crate::ui::ui;
+use crate::{config::get_config, ui::ui};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
     execute,
@@ -23,6 +27,9 @@ pub struct App {
     /// Current value of the input box
     input: String,
 
+    projects_paths: Vec<PathBuf>,
+
+    // Arrow of the selected item
     selection_index: usize,
 
     /// Current input mode
@@ -33,11 +40,18 @@ pub struct App {
 
 impl App {
     fn new(input: String, input_mode: InputMode, repos: Vec<PathBuf>) -> Self {
+        //println!("{}", PROJ_PATHS.config_path.as_path().to_str().unwrap());
         Self {
             input,
             input_mode,
             selection_index: 0,
             repos,
+            projects_paths: get_config()
+                .unwrap()
+                .projects_paths
+                .iter()
+                .map(|s| PathBuf::from(s))
+                .collect(),
         }
     }
 }
@@ -92,7 +106,9 @@ fn handle_input(app: &mut App, key: KeyEvent) -> bool {
     // staless event's handler
     match key.code {
         KeyCode::Char('c') => {
-            return key.modifiers.contains(event::KeyModifiers::CONTROL);
+            if key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                return true;
+            }
         }
         KeyCode::Char('z') => {
             return key.modifiers.contains(event::KeyModifiers::CONTROL);
