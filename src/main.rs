@@ -1,7 +1,7 @@
 pub mod ui;
 use crate::ui::ui;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -76,41 +76,51 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
         terminal.draw(|f| ui(f, &mut app))?;
 
         if let Event::Key(key) = event::read()? {
-            match app.input_mode {
-                InputMode::Normal => match key.code {
-                    KeyCode::Char('c') => {
-                        key.modifiers.contains(event::KeyModifiers::CONTROL);
-                        return Ok(());
-                    }
-                    KeyCode::Char('i') => {
-                        app.input_mode = InputMode::Editing;
-                    }
-                    KeyCode::Char('q') => {
-                        return Ok(());
-                    }
-                    _ => {}
-                },
-                InputMode::Editing => match key.code {
-                    KeyCode::Char('c') => {
-                        key.modifiers.contains(event::KeyModifiers::CONTROL);
-                        return Ok(());
-                    }
-                    KeyCode::Enter => {
-                        println!("input: {}", app.repos.first().unwrap().display());
-                        return Ok(());
-                    }
-                    KeyCode::Char(c) => {
-                        app.input.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        app.input.pop();
-                    }
-                    KeyCode::Esc => {
-                        app.input_mode = InputMode::Normal;
-                    }
-                    _ => {}
-                },
+            if handle_input(&mut app, key) {
+                return Ok(());
             }
         }
     }
+}
+
+fn handle_input(app: &mut App, key: KeyEvent) -> bool {
+    // staless event's handler
+    match key.code {
+        KeyCode::Char('c') => {
+            return key.modifiers.contains(event::KeyModifiers::CONTROL);
+        }
+        KeyCode::Char('z') => {
+            return key.modifiers.contains(event::KeyModifiers::CONTROL);
+        }
+        _ => {}
+    }
+    match app.input_mode {
+        InputMode::Normal => match key.code {
+            KeyCode::Char('i') => {
+                app.input_mode = InputMode::Editing;
+            }
+            KeyCode::Char('q') => {
+                return true;
+            }
+            _ => {}
+        },
+        InputMode::Editing => match key.code {
+            KeyCode::Enter => {
+                println!("input: {}", app.repos.first().unwrap().display());
+                return true;
+            }
+            KeyCode::Char(c) => {
+                app.input.push(c);
+            }
+            KeyCode::Backspace => {
+                app.input.pop();
+            }
+            KeyCode::Esc => {
+                app.input_mode = InputMode::Normal;
+            }
+            _ => {}
+        },
+    }
+
+    false
 }
