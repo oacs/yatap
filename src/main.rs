@@ -21,6 +21,9 @@ enum InputMode {
 pub struct App {
     /// Current value of the input box
     input: String,
+
+    selection_index: usize,
+
     /// Current input mode
     input_mode: InputMode,
     /// History of recorded messages
@@ -32,6 +35,7 @@ impl App {
         Self {
             input,
             input_mode,
+            selection_index: 0,
             repos,
         }
     }
@@ -92,6 +96,18 @@ fn handle_input(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Char('z') => {
             return key.modifiers.contains(event::KeyModifiers::CONTROL);
         }
+        // use arrow keys to navigate
+        KeyCode::Up => {
+            if app.selection_index > 0 {
+                app.selection_index -= 1;
+            }
+        }
+        KeyCode::Down => {
+            if app.selection_index < app.repos.len() - 1 {
+                app.selection_index += 1;
+            }
+        }
+
         _ => {}
     }
     match app.input_mode {
@@ -111,6 +127,7 @@ fn handle_input(app: &mut App, key: KeyEvent) -> bool {
             }
             KeyCode::Char(c) => {
                 app.input.push(c);
+                app.selection_index = 0;
             }
             KeyCode::Backspace => {
                 app.input.pop();

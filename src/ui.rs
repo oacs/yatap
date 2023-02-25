@@ -107,7 +107,18 @@ fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     let repos = app
         .repos
         .iter()
-        .map(|p| ListItem::new(vec![Spans::from(Span::raw(format!("{}", p.display())))]))
+        .enumerate()
+        .map(|(i, p)| {
+            ListItem::new(vec![Spans::from(Span::raw(format!(
+                "{}{}",
+                if i == app.selection_index {
+                    ">>>"
+                } else {
+                    "   "
+                },
+                p.display()
+            )))])
+        })
         .collect::<Vec<ListItem>>();
 
     let messages = List::new(repos).block(Block::default().borders(Borders::ALL).title("Messages"));
