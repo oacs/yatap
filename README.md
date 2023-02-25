@@ -13,4 +13,4 @@ Just run the well respected command `ta` on your terminal, then search for the p
 
 ## Draft Idea
 
-![draftDiagram](https://i.ibb.co/pjVMf25/TA-Design.png)
+![TA - Design](https://user-images.githubusercontent.com/13282482/221361770-c0dbb24d-9bff-4a60-ba93-a81d845c4dee.png)
