@@ -4,18 +4,23 @@ extern crate lazy_static;
 mod config;
 pub mod tmux;
 pub mod ui;
+mod github;
 use crate::{config::get_config, ui::ui};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use github::{search_repositories, Repository};
 use tui::{
     backend::{Backend, CrosstermBackend},
     Terminal,
 };
 
-use std::{error::Error, io, path::PathBuf};
+use tokio::{sync::mpsc, task::JoinHandle};
+
+
+use std::{error::Error, io, path::PathBuf, borrow::BorrowMut};
 
 enum InputMode {
     Normal,
@@ -29,6 +34,8 @@ pub struct App {
 
     projects_paths: Vec<PathBuf>,
 
+    github_token: String,
+
     // Arrow of the selected item
     selection_index: usize,
 
@@ -41,13 +48,16 @@ pub struct App {
 impl App {
     fn new(input: String, input_mode: InputMode, repos: Vec<PathBuf>) -> Self {
         //println!("{}", PROJ_PATHS.config_path.as_path().to_str().unwrap());
+        let config =    get_config()
+                .unwrap();
         Self {
             input,
             input_mode,
             selection_index: 0,
             repos,
-            projects_paths: get_config()
-                .unwrap()
+github_token: config.github_token,
+
+            projects_paths: config
                 .projects_paths
                 .iter()
                 .map(|s| PathBuf::from(s))
@@ -62,7 +72,8 @@ impl Default for App {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -72,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // create app and run it
     let app = App::default();
-    let res = run_app(&mut terminal, app);
+    let res = run_app(&terminal, app);
 
     // on_exit hook
     disable_raw_mode()?;
@@ -83,21 +94,51 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     terminal.show_cursor()?;
 
-    if let Err(err) = res {
+if let Err(err) = res.await  {
         println!("{:?}", err)
     }
 
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+
+async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+    let (tx, mut rx) = mpsc::channel(1);
+
+    // Spawn a background task that runs the HTTP request
+
+    let mut task_handle: Option<JoinHandle<Vec<Repository>>> = None;
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
         if let Event::Key(key) = event::read()? {
             if handle_input(&mut app, key) {
+                // User has requested to exit the application
+                // Cancel any running background task and return
+                if let Some(handle) = task_handle.take() {
+                    handle.abort();
+                }
                 return Ok(());
             }
+
+            // Start a new HTTP request with the current search query
+            let current_search_query = app.input.clone();
+            if let Some(handle) = task_handle.take() {
+                handle.abort();
+            }
+let token = app.github_token.clone();
+
+let task = tokio::task::spawn(async move {
+    search_repositories(token, &current_search_query).await
+});
+println!("{:?}",task.await.unwrap());
+            tx.try_send(app.input.clone()).ok();
+        }
+        if let Ok(query) = rx.try_recv() {
+            // Do something with the response of the HTTP request
+            // ...
+            // ...
+            // ...
         }
     }
 }

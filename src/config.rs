@@ -8,6 +8,7 @@ pub struct ProjPaths {
 #[derive(Serialize, Deserialize)]
 pub struct Configs {
     pub projects_paths: Vec<String>,
+    pub github_token: String,
 }
 
 lazy_static! {
@@ -34,6 +35,7 @@ pub fn get_config() -> Result<Configs> {
 fn create_base_config() -> String {
     let base_config = Configs {
         projects_paths: vec![home::home_dir().unwrap().join("dev").display().to_string()],
+        github_token: String::from(""),
     };
 
     let stringified_config = serde_json::to_string(&base_config).unwrap();
