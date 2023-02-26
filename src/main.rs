@@ -2,10 +2,10 @@
 extern crate lazy_static;
 
 mod config;
+mod github;
 pub mod tmux;
 pub mod ui;
-mod github;
-use crate::{config::get_config, ui::ui};
+use crate::config::get_config;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
     execute,
@@ -19,8 +19,7 @@ use tui::{
 
 use tokio::{sync::mpsc, task::JoinHandle};
 
-
-use std::{error::Error, io, path::PathBuf, borrow::BorrowMut};
+use std::{error::Error, io, path::PathBuf};
 
 enum InputMode {
     Normal,
@@ -48,14 +47,13 @@ pub struct App {
 impl App {
     fn new(input: String, input_mode: InputMode, repos: Vec<PathBuf>) -> Self {
         //println!("{}", PROJ_PATHS.config_path.as_path().to_str().unwrap());
-        let config =    get_config()
-                .unwrap();
+        let config = get_config().unwrap();
         Self {
             input,
             input_mode,
             selection_index: 0,
             repos,
-github_token: config.github_token,
+            github_token: config.github_token,
 
             projects_paths: config
                 .projects_paths
@@ -79,37 +77,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let terminal = Terminal::new(backend)?;
 
     // create app and run it
     let app = App::default();
-    let res = run_app(&terminal, app);
+    let mut res = run_app(terminal, app).await?;
 
     // on_exit hook
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
-if let Err(err) = res.await  {
-        println!("{:?}", err)
-    }
+    execute!(res.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    res.show_cursor()?;
 
     Ok(())
 }
 
-
-async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
-    let (tx, mut rx) = mpsc::channel(1);
-
-    // Spawn a background task that runs the HTTP request
+async fn run_app<B: Backend>(mut terminal: Terminal<B>, mut app: App) -> io::Result<Terminal<B>> {
+    let (tx, mut rx) = mpsc::channel::<Vec<Repository>>(1);
 
     let mut task_handle: Option<JoinHandle<Vec<Repository>>> = None;
+    let mut current_search_query: String;
     loop {
-        terminal.draw(|f| ui(f, &mut app))?;
+        //terminal.draw(|f| ui(f, &mut app))?;
 
         if let Event::Key(key) = event::read()? {
             if handle_input(&mut app, key) {
@@ -118,27 +106,28 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Re
                 if let Some(handle) = task_handle.take() {
                     handle.abort();
                 }
-                return Ok(());
+                return Ok(terminal);
             }
 
-            // Start a new HTTP request with the current search query
-            let current_search_query = app.input.clone();
-            if let Some(handle) = task_handle.take() {
-                handle.abort();
-            }
-let token = app.github_token.clone();
+            current_search_query = Some(app.input.clone()).unwrap();
+            if app.input.len() > 2 {
+                // cancel previous call
+                if let Some(handle) = task_handle.take() {
+                    handle.abort();
+                }
 
-let task = tokio::task::spawn(async move {
-    search_repositories(token, &current_search_query).await
-});
-println!("{:?}",task.await.unwrap());
-            tx.try_send(app.input.clone()).ok();
-        }
-        if let Ok(query) = rx.try_recv() {
-            // Do something with the response of the HTTP request
-            // ...
-            // ...
-            // ...
+                let token = app.github_token.clone();
+                let task = tokio::task::spawn(async move {
+                    search_repositories(token, current_search_query).await
+                });
+
+                let result = task.await.unwrap();
+                tx.send(result).await.unwrap();
+            }
+            if let Ok(query) = rx.try_recv() {
+                // Do something with the response of the HTTP request
+                println!("{:?}", query);
+            }
         }
     }
 }
