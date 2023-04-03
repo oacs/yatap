@@ -16,9 +16,9 @@ use crate::{config::setup_config_file, state::App};
 
 mod config;
 mod github;
-mod path;
 mod state;
 mod ui;
+mod tmux;
 
 /// Project launcher
 #[derive(Parser, Debug)]
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
     while !app.should_close {
         terminal.draw(|f| ui::ui(f, &mut app))?;
         if let Event::Key(key) = event::read()? {
-            ui::handle_input(&mut app, key);
+            ui::handle_input(&mut app, key)?;
         }
     }
     

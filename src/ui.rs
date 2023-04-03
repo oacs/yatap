@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crossterm::event::{self, KeyCode, KeyEvent};
 use unicode_width::UnicodeWidthStr;
 
@@ -10,7 +11,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::state::{App, InputMode};
+use crate::{
+    state::{App, InputMode},
+    tmux,
+};
 
 pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
@@ -103,7 +107,7 @@ fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     f.render_widget(messages, chunk);
 }
 
-pub fn handle_input(app: &mut App, key: KeyEvent) {
+pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
     // staless event's handler
     match key.code {
         KeyCode::Char('c') => {
@@ -145,10 +149,9 @@ pub fn handle_input(app: &mut App, key: KeyEvent) {
         },
         InputMode::Insert => match key.code {
             KeyCode::Enter => {
-                // println!("input: {}", app.repos.first().unwrap().display());
-                // let path = &app.repos[app.selection_index];
-                // tmux::attach_or_create_tmux_session(path.to_path_buf()).unwrap();
-                // return true;
+                let path = &app.paths[app.selection_index];
+                tmux::attach_or_create_tmux_session(path.into())?;
+                app.should_close = true;
             }
             KeyCode::Char(c) => {
                 app.input.push(c);
@@ -166,4 +169,5 @@ pub fn handle_input(app: &mut App, key: KeyEvent) {
             _ => {}
         },
     }
+    Ok(())
 }

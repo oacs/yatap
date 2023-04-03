@@ -1363,6 +1363,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tmux_interface",
  "tokio",
  "toml",
  "unicode-width",
@@ -1452,6 +1453,12 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tmux_interface"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "994f52fd871ec97d0c84c28fcaa717d63636ca1459c4dafb17a97114f3687ab0"
 
 [[package]]
 name = "tokio"

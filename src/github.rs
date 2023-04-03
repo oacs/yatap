@@ -1,7 +1,7 @@
 use anyhow::Result;
 use octocrab::{self, models::Repository};
 
-pub async fn search_repositories(search_query: String) -> Result<Vec<Repository>> {
+pub async fn _search_repositories(search_query: String) -> Result<Vec<Repository>> {
     octocrab::instance()
         .search()
         .repositories(&search_query)
