@@ -1,55 +1,82 @@
-use std::{fs::ReadDir, path::PathBuf};
+use anyhow::Result;
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use std::{io::{self, Stdout}, path::PathBuf};
 
 use clap::Parser;
 use config::load_config;
 
+use config::Config;
+use ratatui::{backend::CrosstermBackend, Terminal};
+
+use crate::{config::setup_config_file, state::App};
+
 mod config;
+mod github;
+mod path;
+mod state;
+mod ui;
 
 /// Project launcher
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Path to config fail
+    /// Path to config file
     #[arg(short, long)]
-    config: PathBuf,
+    config: Option<PathBuf>,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
-    println!("{:?}!", args.config);
-    let config = load_config(args.config);
-    println!("{:?}", config.paths);
+    let config_path = args
+        .config
+        .map_or(setup_config_file(), Ok)
+        .unwrap_or_else(|_| {
+            println!("Warning: we couldn't load the config file from XDG_HOME_CONFIG");
+            PathBuf::new()
+        });
+    let config = load_config(config_path).unwrap_or_else(|_| {
+        println!("We failed to load the config, so we are going to use the default config");
+        Config::default()
+    });
 
-    let paths = config.paths;
-    let paths = get_dir_paths(paths);
-    println!("{:?}", paths);
-    let search = "r";
-    let searched_dirs = search_dirs(search, paths);
-    println!("{:?}", searched_dirs);
+    let mut app = App::from(config);
+    app.paths = app.search_dirs();
+    let mut terminal = setup_terminal()?;
+    while !app.should_close {
+        terminal.draw(|f| ui::ui(f, &mut app))?;
+        if let Event::Key(key) = event::read()? {
+            ui::handle_input(&mut app, key);
+        }
+    }
+    
+    close_terminal(&mut terminal)?;
+
+    Ok(())
 }
 
-/// Grabs a Vec<String> and map it to ReadDir
-fn get_dir_paths(paths: Vec<String>) -> Vec<ReadDir> {
-    let dir_paths: Vec<ReadDir> = paths
-        .iter()
-        .map(|path| std::fs::read_dir(path))
-        .filter_map(|dir| dir.ok())
-        .collect();
-    return dir_paths;
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>>{
+    // setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let terminal = Terminal::new(backend)?;
+    Ok(terminal)
 }
 
-fn search_dirs(search_text: &str, dirs: Vec<ReadDir>) -> Vec<String> {
-    dirs.into_iter()
-        .flat_map(|dir| dir.filter_map(Result::ok))
-        .filter(|entry| entry.path().is_dir())
-        .filter_map(|entry| {
-            let path = entry.path();
-            let file_name = path.file_name()?.to_str()?;
-            if file_name.contains(search_text) {
-                Some(path.to_str().unwrap().to_string())
-            } else {
-                None
-            }
-        })
-        .collect()
+fn close_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    // restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+    Ok(())
 }

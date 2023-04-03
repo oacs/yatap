@@ -1,27 +1,13 @@
-use reqwest::{header, Client};
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
+use octocrab::{self, models::Repository};
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Repository {
-    name: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RawResponse {
-    items: Vec<Repository>,
-}
-
-pub async fn search_repositories(token: String, search_query: String) -> Vec<Repository> {
-    println!("Searching for {}", search_query);
-    let client = Client::new();
-
-    let response = client
-        .get("https://api.github.com/search/repositories")
-        .header(header::USER_AGENT, "rust-lang")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
-        .query(&[("q", format!("user:oacs {}", search_query))])
+pub async fn search_repositories(search_query: String) -> Result<Vec<Repository>> {
+    octocrab::instance()
+        .search()
+        .repositories(&search_query)
+        .per_page(20)
         .send()
-        .await;
-
-    response.unwrap().json::<RawResponse>().await.unwrap().items
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to fetch github repos, {}", e))
+        .map(|page| page.items)
 }
