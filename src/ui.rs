@@ -1,6 +1,8 @@
-use std::{fs::read_dir, path::PathBuf};
+use anyhow::Result;
+use crossterm::event::{self, KeyCode, KeyEvent};
+use unicode_width::UnicodeWidthStr;
 
-use tui::{
+use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -8,9 +10,11 @@ use tui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
-use unicode_width::UnicodeWidthStr;
 
-use crate::{App, InputMode};
+use crate::{
+    state::{App, InputMode},
+    tmux,
+};
 
 pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
@@ -27,10 +31,7 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .split(f.size());
 
     render_help(f, app, chunks[0]);
-
-    app.repos = fetch_paths(app.projects_paths.clone(), app.input.clone());
     render_list_paths(f, app, chunks[1]);
-
     render_input(f, app, chunks[2]);
 }
 
@@ -46,7 +47,7 @@ fn render_help<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
             ],
             Style::default().add_modifier(Modifier::RAPID_BLINK),
         ),
-        InputMode::Editing => (
+        InputMode::Insert => (
             vec![
                 Span::raw("Press "),
                 Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
@@ -67,7 +68,7 @@ fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     let input = Paragraph::new(app.input.as_ref())
         .style(match app.input_mode {
             InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow),
+            InputMode::Insert => Style::default().fg(Color::Yellow),
         })
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunk);
@@ -76,7 +77,7 @@ fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
             // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
             {}
 
-        InputMode::Editing => {
+        InputMode::Insert => {
             // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
             f.set_cursor(
                 // Put cursor past the end of the input text
@@ -88,43 +89,85 @@ fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     }
 }
 
-fn fetch_paths(paths: Vec<PathBuf>, input: String) -> Vec<PathBuf> {
-    let mut directories = vec![];
-
-    for path in paths {
-        if let Ok(entries) = read_dir(path.to_str().unwrap()) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let file_type = entry.file_type().unwrap();
-                    if file_type.is_dir() {
-                        directories.push(entry.path());
-                    }
-                }
-            }
-        }
-    }
-
-    directories
-        .iter()
-        .filter(|m| m.display().to_string().contains(&input))
-        .cloned()
-        .collect::<Vec<PathBuf>>()
-}
-
 fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
-    let repos = app
-        .repos
+    let paths: Vec<ListItem> = app
+        .paths
         .iter()
         .enumerate()
         .map(|(i, p)| {
             ListItem::new(vec![Spans::from(Span::raw(format!(
                 "{} {}",
                 if i == app.selection_index { ">>" } else { "  " },
-                p.display()
+                p.clone()
             )))])
         })
-        .collect::<Vec<ListItem>>();
+        .collect();
 
-    let messages = List::new(repos).block(Block::default().borders(Borders::ALL).title("Messages"));
+    let messages = List::new(paths).block(Block::default().borders(Borders::ALL).title("Messages"));
     f.render_widget(messages, chunk);
+}
+
+pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
+    // staless event's handler
+    match key.code {
+        KeyCode::Char('c') => {
+            if key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                app.should_close = true;
+            }
+        }
+        KeyCode::Char('z') => {
+            if key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                app.should_close = true;
+            }
+        }
+        // use arrow keys to navigate
+        KeyCode::Up => {
+            if app.selection_index > 0 {
+                app.selection_index -= 1;
+            }
+        }
+        KeyCode::Down => {
+            if app.paths.len().gt(&app.selection_index) {
+                app.selection_index += 1;
+            }
+        }
+
+        _ => {}
+    }
+    match app.input_mode {
+        InputMode::Normal => match key.code {
+            KeyCode::Char('i') => {
+                app.input_mode = InputMode::Insert;
+            }
+            KeyCode::Char('a') => {
+                app.input_mode = InputMode::Insert;
+            }
+            KeyCode::Char('q') => {
+                app.should_close = true;
+            }
+            _ => {}
+        },
+        InputMode::Insert => match key.code {
+            KeyCode::Enter => {
+                let path = &app.paths[app.selection_index];
+                tmux::attach_or_create_tmux_session(path.into())?;
+                app.should_close = true;
+            }
+            KeyCode::Char(c) => {
+                app.input.push(c);
+                app.selection_index = 0;
+                app.paths = app.search_dirs();
+            }
+            KeyCode::Backspace => {
+                app.input.pop();
+                app.selection_index = 0;
+                app.paths = app.search_dirs();
+            }
+            KeyCode::Esc => {
+                app.input_mode = InputMode::Normal;
+            }
+            _ => {}
+        },
+    }
+    Ok(())
 }

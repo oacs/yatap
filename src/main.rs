@@ -1,80 +1,76 @@
-#[macro_use]
-extern crate lazy_static;
-
-mod config;
-pub mod tmux;
-pub mod ui;
-use crate::{config::get_config, ui::ui};
+use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    Terminal,
-};
+use std::{io::{self, Stdout}, path::PathBuf};
 
-use std::{error::Error, io, path::PathBuf};
+use clap::Parser;
+use config::load_config;
 
-enum InputMode {
-    Normal,
-    Editing,
+use config::Config;
+use ratatui::{backend::CrosstermBackend, Terminal};
+
+use crate::{config::setup_config_file, state::App};
+
+mod config;
+mod github;
+mod state;
+mod ui;
+mod tmux;
+
+/// Project launcher
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to config file
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 }
 
-/// App holds the state of the application
-pub struct App {
-    /// Current value of the input box
-    input: String,
+#[tokio::main]
+async fn main() -> Result<()> {
+    let args = Args::parse();
+    let config_path = args
+        .config
+        .map_or(setup_config_file(), Ok)
+        .unwrap_or_else(|_| {
+            println!("Warning: we couldn't load the config file from XDG_HOME_CONFIG");
+            PathBuf::new()
+        });
+    let config = load_config(config_path).unwrap_or_else(|_| {
+        println!("We failed to load the config, so we are going to use the default config");
+        Config::default()
+    });
 
-    projects_paths: Vec<PathBuf>,
-
-    // Arrow of the selected item
-    selection_index: usize,
-
-    /// Current input mode
-    input_mode: InputMode,
-    /// History of recorded messages
-    repos: Vec<PathBuf>,
-}
-
-impl App {
-    fn new(input: String, input_mode: InputMode, repos: Vec<PathBuf>) -> Self {
-        //println!("{}", PROJ_PATHS.config_path.as_path().to_str().unwrap());
-        Self {
-            input,
-            input_mode,
-            selection_index: 0,
-            repos,
-            projects_paths: get_config()
-                .unwrap()
-                .projects_paths
-                .iter()
-                .map(|s| PathBuf::from(s))
-                .collect(),
+    let mut app = App::from(config);
+    app.paths = app.search_dirs();
+    let mut terminal = setup_terminal()?;
+    while !app.should_close {
+        terminal.draw(|f| ui::ui(f, &mut app))?;
+        if let Event::Key(key) = event::read()? {
+            ui::handle_input(&mut app, key)?;
         }
     }
+    
+    close_terminal(&mut terminal)?;
+
+    Ok(())
 }
 
-impl Default for App {
-    fn default() -> App {
-        App::new(String::new(), InputMode::Editing, Vec::new())
-    }
-}
-
-fn main() -> Result<(), Box<dyn Error>> {
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>>{
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let terminal = Terminal::new(backend)?;
+    Ok(terminal)
+}
 
-    // create app and run it
-    let app = App::default();
-    let res = run_app(&mut terminal, app);
-
-    // on_exit hook
+fn close_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    // restore terminal
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -82,81 +78,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         DisableMouseCapture
     )?;
     terminal.show_cursor()?;
-
-    if let Err(err) = res {
-        println!("{:?}", err)
-    }
-
     Ok(())
-}
-
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
-    loop {
-        terminal.draw(|f| ui(f, &mut app))?;
-
-        if let Event::Key(key) = event::read()? {
-            if handle_input(&mut app, key) {
-                return Ok(());
-            }
-        }
-    }
-}
-
-fn handle_input(app: &mut App, key: KeyEvent) -> bool {
-    // staless event's handler
-    match key.code {
-        KeyCode::Char('c') => {
-            if key.modifiers.contains(event::KeyModifiers::CONTROL) {
-                return true;
-            }
-        }
-        KeyCode::Char('z') => {
-            return key.modifiers.contains(event::KeyModifiers::CONTROL);
-        }
-        // use arrow keys to navigate
-        KeyCode::Up => {
-            if app.selection_index > 0 {
-                app.selection_index -= 1;
-            }
-        }
-        KeyCode::Down => {
-            if app.selection_index < app.repos.len() - 1 {
-                app.selection_index += 1;
-            }
-        }
-
-        _ => {}
-    }
-    match app.input_mode {
-        InputMode::Normal => match key.code {
-            KeyCode::Char('i') => {
-                app.input_mode = InputMode::Editing;
-            }
-            KeyCode::Char('q') => {
-                return true;
-            }
-            _ => {}
-        },
-        InputMode::Editing => match key.code {
-            KeyCode::Enter => {
-                println!("input: {}", app.repos.first().unwrap().display());
-                let path = &app.repos[app.selection_index];
-                tmux::attach_or_create_tmux_session(path.to_path_buf()).unwrap();
-                return true;
-            }
-            KeyCode::Char(c) => {
-                app.input.push(c);
-                app.selection_index = 0;
-            }
-            KeyCode::Backspace => {
-                app.input.pop();
-            }
-            KeyCode::Esc => {
-                app.input_mode = InputMode::Normal;
-            }
-            _ => {}
-        },
-    }
-
-    false
 }
