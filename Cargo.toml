@@ -1,9 +1,16 @@
 [package]
-name = "ta"
+name = "yatap"
 version = "0.1.0"
 edition = "2021"
+authors = ["Oscar Castillejo <oacs1221@gmail.com>"]
+license = "MIT"
+description = """
+Yatap is a cli tool to fuzzy find all folders in a list of
+specified folders from a TOML config file and open them as a new tmux session. 
+"""
+homepage = "https://github.com/oacs/yatap"
+repository = "https://github.com/oacs/yatap"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.69"
@@ -19,3 +26,7 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.7.2"
 unicode-width = "0.1.10"
 xdg = "2.4.1"
+
+[[bin]]
+name = "ta"
+path = "src/main.rs"
