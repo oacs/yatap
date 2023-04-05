@@ -1,20 +1,33 @@
-use std::{env, fs::File, io::Write, path::PathBuf};
+use anyhow::anyhow;
+use anyhow::Result;
+use std::{env, path::PathBuf};
 
 use tmux_interface::{
-    AttachSession, Error, NewSession, Sessions, StartServer, SwitchClient, TargetSession,
-    TmuxOutput, SESSION_ALL,
+    AttachSession, NewSession, Sessions, StartServer, SwitchClient, TargetSession, TmuxOutput,
+    SESSION_ALL,
 };
 
-pub fn attach_or_create_tmux_session(dir: PathBuf) -> Result<TmuxOutput, Error> {
-    let mut output = File::create("log")?;
-    StartServer::new().output()?;
-    let session_name = dir.file_name().unwrap().to_str().unwrap().to_string();
-    writeln!(output, "session_name: {}", session_name)?;
+pub fn attach_or_create_tmux_session(dir: PathBuf) -> Result<TmuxOutput> {
+    StartServer::new()
+        .output()
+        .map_err(|e| anyhow!("Failed to create tmux server: {}", e))?;
+    let session_name = dir
+        .file_name()
+        .ok_or_else(|| anyhow!("Failed to get file name from directory"))?
+        .to_str()
+        .ok_or_else(|| anyhow!("Failed to convert file name to string"))?
+        .to_string();
     let target_session = TargetSession::Raw(&session_name).to_string();
-    let sessions = Sessions::get(SESSION_ALL)?;
-    let session = sessions
-        .into_iter()
-        .find(|s| s.name == Some(target_session.to_string()));
+    let session = Sessions::get(SESSION_ALL)
+        .map(|s| {
+            s.into_iter()
+                .map(|s| s.name)
+                .filter_map(|mut s| s.take())
+                .find(|s| *s == target_session)
+                .take()
+        })
+        .unwrap_or(None);
+
     if session.is_none() {
         NewSession::new()
             .detached()
@@ -22,11 +35,17 @@ pub fn attach_or_create_tmux_session(dir: PathBuf) -> Result<TmuxOutput, Error> 
             .start_directory(dir.to_str().unwrap().to_string())
             .shell_command("nvim .")
             .output()
-            .unwrap();
+            .map_err(|e| anyhow!("Failed to create new tmux session: {}", e))?;
     }
 
     if env::var("TMUX").is_err() {
-        AttachSession::new().target_session(session_name).output()?;
+        AttachSession::new()
+            .target_session(&session_name)
+            .output()?;
     }
-    SwitchClient::new().target_session(target_session).output()
+
+    SwitchClient::new()
+        .target_session(&target_session)
+        .output()
+        .map_err(|e| anyhow!("Failed to switch to client: {}", e))
 }
