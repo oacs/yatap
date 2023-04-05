@@ -153,6 +153,18 @@ pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
                 tmux::attach_or_create_tmux_session(path.into())?;
                 app.should_close = true;
             }
+            KeyCode::Char('n') => {
+                if key.modifiers.contains(event::KeyModifiers::CONTROL)
+                    && app.paths.len() > app.selection_index + 1
+                {
+                    app.selection_index += 1;
+                }
+            }
+            KeyCode::Char('p') => {
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) && app.selection_index > 0 {
+                    app.selection_index -= 1;
+                }
+            }
             KeyCode::Char(c) => {
                 app.input.push(c);
                 app.selection_index = 0;
