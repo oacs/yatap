@@ -108,19 +108,12 @@ fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
 }
 
 pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
-    // staless event's handler
     match key.code {
-        KeyCode::Char('c') => {
+        KeyCode::Char('c') | KeyCode::Char('z') => {
             if key.modifiers.contains(event::KeyModifiers::CONTROL) {
                 app.should_close = true;
             }
         }
-        KeyCode::Char('z') => {
-            if key.modifiers.contains(event::KeyModifiers::CONTROL) {
-                app.should_close = true;
-            }
-        }
-        // use arrow keys to navigate
         KeyCode::Up => {
             if app.selection_index > 0 {
                 app.selection_index -= 1;
@@ -131,54 +124,51 @@ pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
                 app.selection_index += 1;
             }
         }
-
-        _ => {}
-    }
-    match app.input_mode {
-        InputMode::Normal => match key.code {
-            KeyCode::Char('i') => {
-                app.input_mode = InputMode::Insert;
-            }
-            KeyCode::Char('a') => {
-                app.input_mode = InputMode::Insert;
-            }
-            KeyCode::Char('q') => {
-                app.should_close = true;
-            }
-            _ => {}
-        },
-        InputMode::Insert => match key.code {
-            KeyCode::Enter => {
-                let path = &app.paths[app.selection_index];
-                tmux::attach_or_create_tmux_session(path.into())?;
-                app.should_close = true;
-            }
-            KeyCode::Char('n') => {
-                if key.modifiers.contains(event::KeyModifiers::CONTROL)
-                    && app.paths.len() > app.selection_index + 1
-                {
-                    app.selection_index += 1;
+        _ => match app.input_mode {
+            InputMode::Normal => match key.code {
+                KeyCode::Char('i') | KeyCode::Char('a') => {
+                    app.input_mode = InputMode::Insert;
                 }
-            }
-            KeyCode::Char('p') => {
-                if key.modifiers.contains(event::KeyModifiers::CONTROL) && app.selection_index > 0 {
-                    app.selection_index -= 1;
+                KeyCode::Char('q') => {
+                    app.should_close = true;
                 }
-            }
-            KeyCode::Char(c) => {
-                app.input.push(c);
-                app.selection_index = 0;
-                app.paths = app.search_dirs();
-            }
-            KeyCode::Backspace => {
-                app.input.pop();
-                app.selection_index = 0;
-                app.paths = app.search_dirs();
-            }
-            KeyCode::Esc => {
-                app.input_mode = InputMode::Normal;
-            }
-            _ => {}
+                _ => {}
+            },
+            InputMode::Insert => match key.code {
+                KeyCode::Enter => {
+                    let path = &app.paths[app.selection_index];
+                    tmux::attach_or_create_tmux_session(path.into())?;
+                    app.should_close = true;
+                }
+                KeyCode::Char('n') => {
+                    if key.modifiers.contains(event::KeyModifiers::CONTROL)
+                        && app.paths.len() > app.selection_index + 1
+                    {
+                        app.selection_index += 1;
+                    }
+                }
+                KeyCode::Char('p') => {
+                    if key.modifiers.contains(event::KeyModifiers::CONTROL)
+                        && app.selection_index > 0
+                    {
+                        app.selection_index -= 1;
+                    }
+                }
+                KeyCode::Backspace => {
+                    app.input.pop();
+                    app.selection_index = 0;
+                    app.paths = app.search_dirs();
+                }
+                KeyCode::Char(c) => {
+                    app.input.push(c);
+                    app.selection_index = 0;
+                    app.paths = app.search_dirs();
+                }
+                KeyCode::Esc => {
+                    app.input_mode = InputMode::Normal;
+                }
+                _ => {}
+            },
         },
     }
     Ok(())
