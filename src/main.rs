@@ -24,6 +24,9 @@ mod tmux;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(short, long)]
+    path: Option<PathBuf>,
+
     /// Path to config file
     #[arg(short, long)]
     config: Option<PathBuf>,
@@ -43,6 +46,11 @@ async fn main() -> Result<()> {
         println!("We failed to load the config, so we are going to use the default config");
         Config::default()
     });
+
+    if let Some(path) = args.path {
+                tmux::attach_or_create_tmux_session(path.into())?;
+        return Ok(())
+    }
 
     let mut app = App::from(config);
     app.paths = app.search_dirs();
