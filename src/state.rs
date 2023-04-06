@@ -14,15 +14,19 @@ pub struct App {
     pub input: String,
     /// Current input mode
     pub input_mode: InputMode,
+    /// Current selection on the list
     pub selection_index: usize,
 
+    /// First loaded paths value
     base_paths: Vec<String>,
     pub paths: Vec<String>,
 
+    /// toggle to close the app
     pub should_close: bool,
 }
 
 impl App {
+    /// Adds a character to the input buffer or removes the previous character if the backspace key is pressed.
     pub fn add_input_char(&mut self, c: KeyCode) {
         match c {
             KeyCode::Backspace => {
@@ -36,17 +40,21 @@ impl App {
         self.paths = self.search_dirs();
     }
 
+    /// Increments the selection index to move to the next item in the list of paths, if there is one.
     pub fn select_next_item(&mut self) {
         if self.paths.len() > self.selection_index + 1 {
             self.selection_index += 1;
         }
     }
+
+    /// Decrements the current selection index by one to select the previous item in the list.
     pub fn select_prev_item(&mut self) {
         if self.selection_index > 0 {
             self.selection_index -= 1;
         }
     }
 
+    /// This function searches through the directories and returns a vector of the directories that match the search input. If the search input is empty, it returns all the base paths.
     pub fn search_dirs(&mut self) -> Vec<String> {
         self.selection_index = 0;
         if self.input.is_empty() {

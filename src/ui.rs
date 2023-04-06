@@ -58,7 +58,7 @@ fn render_help<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
 fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     let input = Paragraph::new(app.input.as_ref())
         .style(match app.input_mode {
-            InputMode::Insert => Style::default().fg(Color::Yellow),
+            InputMode::Insert => Style::default().fg(Color::Magenta),
         })
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunk);
