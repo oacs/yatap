@@ -1,9 +1,10 @@
 use std::fs::read_dir;
 
+use crossterm::event::KeyCode;
+
 use crate::config::Config;
 
 pub enum InputMode {
-    Normal,
     Insert,
 }
 
@@ -22,7 +23,32 @@ pub struct App {
 }
 
 impl App {
-    pub fn search_dirs(&self) -> Vec<String> {
+    pub fn add_input_char(&mut self, c: KeyCode) {
+        match c {
+            KeyCode::Backspace => {
+                self.input.pop();
+            }
+            KeyCode::Char(c) => {
+                self.input.push(c);
+            }
+            _ => {}
+        }
+        self.paths = self.search_dirs();
+    }
+
+    pub fn select_next_item(&mut self) {
+        if self.paths.len() > self.selection_index + 1 {
+            self.selection_index += 1;
+        }
+    }
+    pub fn select_prev_item(&mut self) {
+        if self.selection_index > 0 {
+            self.selection_index -= 1;
+        }
+    }
+
+    pub fn search_dirs(&mut self) -> Vec<String> {
+        self.selection_index = 0;
         if self.input.is_empty() {
             self.base_paths.clone()
         } else {
@@ -59,7 +85,7 @@ impl Default for App {
         App {
             selection_index: 0,
             input: String::new(),
-            input_mode: InputMode::Normal,
+            input_mode: InputMode::Insert,
             paths: Vec::new(),
             base_paths: Vec::new(),
             should_close: false,

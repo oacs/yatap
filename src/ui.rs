@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use crossterm::event::{self, KeyCode, KeyEvent};
 use unicode_width::UnicodeWidthStr;
@@ -37,23 +39,13 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
 fn render_help<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     let (msg, style) = match app.input_mode {
-        InputMode::Normal => (
-            vec![
-                Span::raw("Press "),
-                Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" to exit, "),
-                Span::styled("i", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" to start editing."),
-            ],
-            Style::default().add_modifier(Modifier::RAPID_BLINK),
-        ),
         InputMode::Insert => (
             vec![
                 Span::raw("Press "),
                 Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(" to stop editing, "),
                 Span::styled("Enter", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" to record the message"),
+                Span::raw(" to attach or create tmux session"),
             ],
             Style::default(),
         ),
@@ -66,16 +58,11 @@ fn render_help<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
 fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     let input = Paragraph::new(app.input.as_ref())
         .style(match app.input_mode {
-            InputMode::Normal => Style::default(),
             InputMode::Insert => Style::default().fg(Color::Yellow),
         })
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunk);
     match app.input_mode {
-        InputMode::Normal =>
-            // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-            {}
-
         InputMode::Insert => {
             // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
             f.set_cursor(
@@ -114,57 +101,33 @@ pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
             }
         }
         KeyCode::Up => {
-            if app.selection_index > 0 {
-                app.selection_index -= 1;
-            }
+            app.select_prev_item();
         }
         KeyCode::Down => {
-            if app.paths.len().gt(&app.selection_index) {
-                app.selection_index += 1;
-            }
+            app.select_next_item();
         }
         _ => match app.input_mode {
-            InputMode::Normal => match key.code {
-                KeyCode::Char('i') | KeyCode::Char('a') => {
-                    app.input_mode = InputMode::Insert;
-                }
-                KeyCode::Char('q') => {
-                    app.should_close = true;
-                }
-                _ => {}
-            },
             InputMode::Insert => match key.code {
                 KeyCode::Enter => {
                     let path = &app.paths[app.selection_index];
-                    tmux::attach_or_create_tmux_session(path.into())?;
+                    let path: PathBuf = path.into();
+                    tmux::attach_or_create_tmux_session(path)?;
                     app.should_close = true;
                 }
                 KeyCode::Char('n') => {
-                    if key.modifiers.contains(event::KeyModifiers::CONTROL)
-                        && app.paths.len() > app.selection_index + 1
-                    {
-                        app.selection_index += 1;
+                    if key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        app.select_next_item();
                     }
                 }
                 KeyCode::Char('p') => {
-                    if key.modifiers.contains(event::KeyModifiers::CONTROL)
-                        && app.selection_index > 0
-                    {
-                        app.selection_index -= 1;
+                    if key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        app.select_prev_item();
                     }
                 }
-                KeyCode::Backspace => {
-                    app.input.pop();
-                    app.selection_index = 0;
-                    app.paths = app.search_dirs();
-                }
-                KeyCode::Char(c) => {
-                    app.input.push(c);
-                    app.selection_index = 0;
-                    app.paths = app.search_dirs();
-                }
+                KeyCode::Backspace => app.add_input_char(crossterm::event::KeyCode::Backspace),
+                KeyCode::Char(c) => app.add_input_char(crossterm::event::KeyCode::Char(c)),
                 KeyCode::Esc => {
-                    app.input_mode = InputMode::Normal;
+                    app.should_close = true;
                 }
                 _ => {}
             },
