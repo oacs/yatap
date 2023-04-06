@@ -24,13 +24,14 @@ pub struct App {
 impl App {
     pub fn search_dirs(&self) -> Vec<String> {
         if self.input.is_empty() {
-            return self.base_paths.clone();
+            self.base_paths.clone()
+        } else {
+            self.base_paths
+                .iter()
+                .filter(|dir| dir.contains(&self.input))
+                .cloned()
+                .collect()
         }
-        self.base_paths
-            .iter()
-            .filter(|dir| dir.contains(&self.input))
-            .cloned()
-            .collect()
     }
 
     pub(crate) fn from(config: Config) -> App {
@@ -40,10 +41,7 @@ impl App {
             .filter_map(|path| read_dir(path).ok())
             .flat_map(|dir| dir.filter_map(Result::ok))
             .filter(|entry| entry.path().is_dir())
-            .map(|entry| {
-                let path = entry.path();
-                path.to_str().unwrap().to_string()
-            })
+            .map(|entry| entry.path().to_string_lossy().into_owned())
             .collect();
         App {
             selection_index: 0,

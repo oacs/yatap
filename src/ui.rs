@@ -60,8 +60,7 @@ fn render_help<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
     };
     let mut text = Text::from(Spans::from(msg));
     text.patch_style(style);
-    let help_message = Paragraph::new(text);
-    f.render_widget(help_message, chunk);
+    f.render_widget(Paragraph::new(text), chunk);
 }
 
 fn render_input<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {

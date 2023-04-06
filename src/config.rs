@@ -18,20 +18,19 @@ pub enum ConfigLoadErrors {
 }
 
 pub fn load_config(path: PathBuf) -> Result<Config, ConfigLoadErrors> {
-    let config = std::fs::read_to_string(path).map_err(|_| ConfigLoadErrors::OpenConfigFailed)?;
-    let config = toml::from_str::<Config>(&config).map_err(|_| ConfigLoadErrors::ParseFailed)?;
-    Ok(config)
+    std::fs::read_to_string(path)
+        .map_err(|_| ConfigLoadErrors::OpenConfigFailed)
+        .and_then(|config| {
+            toml::from_str::<Config>(&config).map_err(|_| ConfigLoadErrors::ParseFailed)
+        })
 }
 
 pub fn setup_config_file() -> Result<PathBuf> {
-    let xdg_dirs = xdg::BaseDirectories::new()?;
-    xdg_dirs.create_config_directory(APP_NAME)?;
     let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME)?;
-    let config_file_path = xdg_dirs.get_config_file(CONFIG_FILENAME);
-    let config_file = File::open(config_file_path.clone());
-    if config_file.is_err() {
-        let mut config_file = File::create(config_file_path.clone())?;
-        write!(&mut config_file, "{}", toml::to_string(&Config::default())?)?;
+    let config_file_path = xdg_dirs.place_config_file(CONFIG_FILENAME)?;
+    if !config_file_path.exists() {
+        let mut config_file = File::create(&config_file_path)?;
+        write!(config_file, "{}", toml::to_string(&Config::default())?)?;
     }
     Ok(config_file_path)
 }
