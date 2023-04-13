@@ -95,13 +95,6 @@ fn render_list_paths<B: Backend>(f: &mut Frame<B>, app: &mut App, chunk: Rect) {
 
 pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
     match key.code {
-        KeyCode::Char('c') | KeyCode::Char('z') => {
-            if key.modifiers.contains(event::KeyModifiers::CONTROL) {
-                app.should_close = true;
-            } else {
-                app.add_input_char(key.code);
-            }
-        }
         KeyCode::Up => {
             app.select_prev_item();
         }
@@ -116,18 +109,18 @@ pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
                     tmux::attach_or_create_tmux_session(path)?;
                     app.should_close = true;
                 }
-                KeyCode::Char('n') => {
-                    if key.modifiers.contains(event::KeyModifiers::CONTROL) {
-                        app.select_next_item();
-                    }
-                }
-                KeyCode::Char('p') => {
-                    if key.modifiers.contains(event::KeyModifiers::CONTROL) {
-                        app.select_prev_item();
-                    }
-                }
                 KeyCode::Backspace => app.add_input_char(crossterm::event::KeyCode::Backspace),
-                KeyCode::Char(c) => app.add_input_char(crossterm::event::KeyCode::Char(c)),
+                KeyCode::Char(c) => {
+                    if key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                        match c {
+                            'c' | 'z' => app.should_close = true,
+                            'p' => app.select_prev_item(),
+                            'n' => app.select_next_item(),
+                            _ => (),
+                        }
+                    }
+                    app.add_input_char(crossterm::event::KeyCode::Char(c));
+                }
                 KeyCode::Esc => {
                     app.should_close = true;
                 }
