@@ -18,6 +18,7 @@ clap = { version = "4.1.6", features = ["derive"] }
 crossterm = "0.26.1"
 octocrab = "0.19.0"
 ratatui = "0.20.1"
+rust-fuzzy-search = "0.1.1"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 tempfile = "3.5.0"

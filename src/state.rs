@@ -1,6 +1,6 @@
-use std::fs::read_dir;
-
 use crossterm::event::KeyCode;
+use rust_fuzzy_search::fuzzy_search_best_n;
+use std::{collections::HashMap, fs::read_dir};
 
 use crate::config::Config;
 
@@ -18,7 +18,7 @@ pub struct App {
     pub selection_index: usize,
 
     /// First loaded paths value
-    base_paths: Vec<String>,
+    base_paths: HashMap<String, Vec<String>>,
     pub paths: Vec<String>,
 
     /// toggle to close the app
@@ -54,34 +54,57 @@ impl App {
         }
     }
 
+    pub fn all_paths(&self) -> Vec<String> {
+        self.base_paths
+            .values()
+            .flat_map(|dirs| dirs.iter())
+            .cloned()
+            .collect()
+    }
+
     /// This function searches through the directories and returns a vector of the directories that match the search input. If the search input is empty, it returns all the base paths.
     pub fn search_dirs(&mut self) -> Vec<String> {
-        self.selection_index = 0;
+        let all_paths = self.all_paths();
         if self.input.is_empty() {
-            self.base_paths.clone()
-        } else {
-            self.base_paths
-                .iter()
-                .filter(|dir| dir.contains(&self.input))
-                .cloned()
-                .collect()
+            return all_paths;
         }
+
+        let all_paths: Vec<&str> = all_paths.iter().map(AsRef::as_ref).to_owned().collect();
+
+        let best_matches: Vec<(&str, f32)> = fuzzy_search_best_n(&self.input, &all_paths, 10);
+
+        best_matches
+            .into_iter()
+            .map(|(matched_str, _score)| matched_str.to_string())
+            .collect()
     }
 
     pub(crate) fn from(config: Config) -> App {
-        let base_paths: Vec<String> = config
-            .paths
-            .iter()
-            .filter_map(|path| read_dir(path).ok())
-            .flat_map(|dir| dir.filter_map(Result::ok))
-            .filter(|entry| entry.path().is_dir())
-            .map(|entry| entry.path().to_string_lossy().into_owned())
+        let mut base_paths: HashMap<String, Vec<String>> = HashMap::new();
+
+        for path in &config.paths {
+            if let Ok(entries) = read_dir(path) {
+                let dir_list: Vec<String> = entries
+                    .filter_map(Result::ok)
+                    .filter(|entry| entry.path().is_dir())
+                    .map(|entry| entry.path().to_string_lossy().into_owned())
+                    .collect();
+
+                base_paths.insert(path.clone(), dir_list);
+            }
+        }
+
+        let paths: Vec<String> = base_paths
+            .values()
+            .flat_map(|v| v.iter())
+            .cloned()
             .collect();
+
         App {
             selection_index: 0,
             input: String::new(),
             input_mode: InputMode::Insert,
-            paths: base_paths.clone(),
+            paths,
             base_paths,
             should_close: false,
         }
@@ -95,7 +118,7 @@ impl Default for App {
             input: String::new(),
             input_mode: InputMode::Insert,
             paths: Vec::new(),
-            base_paths: Vec::new(),
+            base_paths: HashMap::new(),
             should_close: false,
         }
     }

@@ -98,6 +98,8 @@ pub fn handle_input(app: &mut App, key: KeyEvent) -> Result<()> {
         KeyCode::Char('c') | KeyCode::Char('z') => {
             if key.modifiers.contains(event::KeyModifiers::CONTROL) {
                 app.should_close = true;
+            } else {
+                app.add_input_char(key.code);
             }
         }
         KeyCode::Up => {
