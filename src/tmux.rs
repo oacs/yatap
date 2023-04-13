@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use anyhow::Result;
 use std::{env, path::PathBuf};
-use tmux_interface::Session;
+
 use tmux_interface::TmuxCommand;
 
 use tmux_interface::{
