@@ -1,6 +1,8 @@
 use anyhow::anyhow;
 use anyhow::Result;
 use std::{env, path::PathBuf};
+use tmux_interface::Session;
+use tmux_interface::TmuxCommand;
 
 use tmux_interface::{
     AttachSession, NewSession, Sessions, StartServer, SwitchClient, TargetSession, TmuxOutput,
@@ -53,11 +55,17 @@ pub fn attach_or_create_tmux_session(dir: PathBuf) -> Result<TmuxOutput> {
     if session.is_none() {
         NewSession::new()
             .detached()
-            .session_name(session_name.clone())
+            .session_name(&session_name)
             .start_directory(dir.to_str().unwrap().to_string())
-            .shell_command("nvim .")
             .output()
             .map_err(|e| anyhow!("Failed to create new tmux session: {}", e))?;
+
+        let tmux = TmuxCommand::new();
+        tmux.send_keys()
+            .target_pane(&target_session)
+            .key("nvim .")
+            .key("C-m")
+            .output()?;
     }
 
     // If we are not on a tmux session, the function attaches to the newly created or existing session.
